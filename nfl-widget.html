@@ -1,20 +1,44 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>NFL Widget</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
   <style>
-    html, body { margin: 0; padding: 0; height: 100%; }
-    #sr-widget { min-height: 800px; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+      font-family: Arial, sans-serif;
+    }
+
+    #sr-widget {
+      min-height: 900px;
+      width: 100%;
+    }
   </style>
 </head>
 <body>
-  <div id="sr-widget" class="sr-widget"
-       data-sr-widget="us.match.nfl.summary"
-       data-sr-match-id="sd:match:2724b0ed-71b1-4c35-a977-087f4f9404f4"></div>
 
-  <script src="https://widgets.media.sportradar.com/YOUR_CLIENT_ALIAS/widgetloader"
-          data-sr-language="en_us" async></script>
+  <div id="sr-widget"></div>
+
+  <script>
+    (function(a,b,c,d,e,f,g,h,i){
+      a[e]||(i=a[e]=function(){(a[e].q=a[e].q||[]).push(arguments)},
+      i.l=1*new Date,i.o=f,g=b.createElement(c),h=b.getElementsByTagName(c)[0],
+      g.async=1,g.src=d,g.setAttribute("n",e),h.parentNode.insertBefore(g,h)
+    )})(window,document,"script",
+      "https://widgets.media.sportradar.com/anjswlahffk/widgetloader",
+      "SIR",{language:"en_us"}
+    );
+
+    window.addEventListener("load", function () {
+      SIR('addWidget', '#sr-widget', 'us.match.nfl.summary', {
+        matchId: 'sd:match:2724b0ed-71b1-4c35-a977-087f4f9404f4'
+      });
+    });
+  </script>
+
 </body>
 </html>
