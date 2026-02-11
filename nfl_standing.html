@@ -1,55 +1,310 @@
-<script>
-  const API_KEY = "네키";
-  const SEASON = "2024REG";
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>NFL Standings Widget</title>
 
-  async function loadStandings() {
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      margin: 0;
+      padding: 16px;
+    }
+
+    .card {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 14px;
+      padding: 16px;
+      max-width: 720px;
+      margin: 0 auto;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.35);
+    }
+
+    .top {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    h2 { margin: 0; font-size: 18px; color: #f9fafb; }
+
+    .muted { color: #9ca3af; font-size: 12px; }
+    .pill {
+      font-size: 12px;
+      padding: 4px 10px;
+      border: 1px solid #374151;
+      border-radius: 999px;
+      background: #0b1220;
+      color: #cbd5e1;
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin: 10px 0 12px;
+    }
+
+    button {
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid #374151;
+      background: #0b1220;
+      color: #e5e7eb;
+      cursor: pointer;
+    }
+    button:hover { filter: brightness(1.08); }
+    button:disabled { opacity: .6; cursor: not-allowed; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      overflow: hidden;
+      border-radius: 12px;
+    }
+
+    thead th {
+      text-align: left;
+      color: #9ca3af;
+      font-weight: 600;
+      padding: 10px 8px;
+      border-bottom: 1px solid #374151;
+      background: #0b1220;
+      position: sticky;
+      top: 0;
+    }
+
+    tbody td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #1f2937;
+      vertical-align: middle;
+    }
+
+    tbody tr:hover { background: rgba(255,255,255,0.03); }
+
+    .rank { width: 36px; color: #cbd5e1; }
+    .team { font-weight: 700; color: #f9fafb; }
+    .right { text-align: right; }
+    .nowrap { white-space: nowrap; }
+
+    .grid2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 14px;
+    }
+    @media (max-width: 680px) {
+      .grid2 { grid-template-columns: 1fr; }
+    }
+
+    .mini {
+      border: 1px solid #1f2937;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .mini .head {
+      padding: 10px 12px;
+      background: #0b1220;
+      border-bottom: 1px solid #1f2937;
+      font-weight: 700;
+      color: #f9fafb;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px;
+    }
+    .mini .body { padding: 10px 12px; }
+    .mini table thead { display: none; }
+    .mini table td { padding: 8px 6px; border-bottom: 1px solid #111827; }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <div class="top">
+      <h2>NFL Standings</h2>
+      <div class="pill" id="seasonPill">Season: -</div>
+    </div>
+
+    <div class="controls">
+      <button id="reloadBtn">새로고침</button>
+      <span class="muted" id="status">Loading…</span>
+    </div>
+
+    <table aria-label="NFL standings table">
+      <thead>
+        <tr>
+          <th class="rank">#</th>
+          <th>Team</th>
+          <th class="right">W</th>
+          <th class="right">L</th>
+          <th class="right">T</th>
+          <th class="right nowrap">Pct</th>
+          <th class="right nowrap">PF</th>
+          <th class="right nowrap">PA</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+
+    <div class="grid2" id="byDivision"></div>
+
+    <div class="muted" style="margin-top:12px;">
+      데이터는 Cloudflare Worker 프록시를 통해 로드됨.
+    </div>
+  </div>
+
+  <script>
+    const WORKER_URL = "https://wispy-mud-ff3e.maddenjay789.workers.dev/";
+
     const statusEl = document.getElementById("status");
-    const tbody = document.querySelector("#table tbody");
+    const seasonPill = document.getElementById("seasonPill");
+    const rowsEl = document.getElementById("rows");
+    const reloadBtn = document.getElementById("reloadBtn");
+    const byDivisionEl = document.getElementById("byDivision");
 
-    statusEl.textContent = "Fetching…";
+    function safeNum(v, fallback = 0) {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : fallback;
+    }
 
-    try {
-      const url = `https://api.sportsdata.io/v3/nfl/scores/json/Standings/${SEASON}?key=${encodeURIComponent(API_KEY)}`;
-      const res = await fetch(url, { headers: { "Accept": "application/json" } });
+    function pct3(v) {
+      const n = safeNum(v, 0);
+      return n.toFixed(3);
+    }
 
-      // 응답 텍스트 먼저 확보(에러 메시지 확인용)
-      const text = await res.text();
+    function teamLabel(t) {
+      // SportsDataIO standings usually has City/Name, sometimes Team abbreviation
+      const city = t.City ?? "";
+      const name = t.Name ?? "";
+      const abbr = t.Team ?? "";
+      const label = `${city} ${name}`.trim();
+      return label || abbr || "-";
+    }
 
-      if (!res.ok) {
-        statusEl.textContent = `HTTP ${res.status} ${res.statusText} / ${text.slice(0, 180)}`;
-        return;
+    function groupBy(arr, keyFn) {
+      const m = new Map();
+      for (const item of arr) {
+        const k = keyFn(item) ?? "Unknown";
+        if (!m.has(k)) m.set(k, []);
+        m.get(k).push(item);
       }
+      return m;
+    }
 
-      const data = JSON.parse(text);
-
-      if (!Array.isArray(data)) {
-        statusEl.textContent = `Unexpected response (not array): ${text.slice(0, 180)}`;
-        return;
-      }
-
-      data.sort((a, b) => (b.Percentage ?? 0) - (a.Percentage ?? 0));
-
-      tbody.innerHTML = "";
-      data.forEach((team, index) => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${index + 1}</td>
-          <td class="team">${team.City ?? ""} ${team.Name ?? team.Team ?? ""}</td>
-          <td>${team.Wins ?? "-"}</td>
-          <td>${team.Losses ?? "-"}</td>
-          <td>${team.Ties ?? "-"}</td>
-          <td>${(team.Percentage ?? 0).toFixed ? (team.Percentage).toFixed(3) : "-"}</td>
-        `;
-        tbody.appendChild(tr);
+    function renderOverall(data) {
+      // sort by win pct desc, then wins desc
+      const sorted = [...data].sort((a, b) => {
+        const dp = safeNum(b.Percentage) - safeNum(a.Percentage);
+        if (dp !== 0) return dp;
+        return safeNum(b.Wins) - safeNum(a.Wins);
       });
 
-      statusEl.textContent = "Updated";
-    } catch (e) {
-      // 여기서 "TypeError: Failed to fetch"면 CORS 가능성 큼
-      statusEl.textContent = `Fetch error: ${String(e)}`;
-      console.error(e);
+      rowsEl.innerHTML = "";
+      sorted.forEach((t, idx) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="rank">${idx + 1}</td>
+          <td class="team">${teamLabel(t)}</td>
+          <td class="right">${t.Wins ?? "-"}</td>
+          <td class="right">${t.Losses ?? "-"}</td>
+          <td class="right">${t.Ties ?? "-"}</td>
+          <td class="right nowrap">${pct3(t.Percentage)}</td>
+          <td class="right nowrap">${t.PointsFor ?? "-"}</td>
+          <td class="right nowrap">${t.PointsAgainst ?? "-"}</td>
+        `;
+        rowsEl.appendChild(tr);
+      });
     }
-  }
 
-  loadStandings();
-</script>
+    function renderByDivision(data) {
+      const byDiv = groupBy(data, t => `${t.Conference ?? ""} ${t.Division ?? ""}`.trim());
+      const divKeys = Array.from(byDiv.keys()).sort((a, b) => a.localeCompare(b));
+
+      byDivisionEl.innerHTML = "";
+      for (const key of divKeys) {
+        const teams = byDiv.get(key).slice().sort((a, b) => {
+          const dp = safeNum(b.Percentage) - safeNum(a.Percentage);
+          if (dp !== 0) return dp;
+          return safeNum(b.Wins) - safeNum(a.Wins);
+        });
+
+        const box = document.createElement("div");
+        box.className = "mini";
+        box.innerHTML = `
+          <div class="head">
+            <span>${key || "Division"}</span>
+            <span class="muted">${teams.length} teams</span>
+          </div>
+          <div class="body">
+            <table>
+              <tbody>
+                ${teams.map((t, i) => `
+                  <tr>
+                    <td class="rank">${i + 1}</td>
+                    <td class="team">${teamLabel(t)}</td>
+                    <td class="right nowrap">${t.Wins ?? "-"}-${t.Losses ?? "-"}-${t.Ties ?? "-"}</td>
+                    <td class="right nowrap">${pct3(t.Percentage)}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        `;
+        byDivisionEl.appendChild(box);
+      }
+    }
+
+    async function load() {
+      reloadBtn.disabled = true;
+      statusEl.textContent = "Fetching…";
+
+      try {
+        // cache-bust
+        const url = WORKER_URL + (WORKER_URL.includes("?") ? "&" : "?") + "t=" + Date.now();
+        const res = await fetch(url, { headers: { "Accept": "application/json" } });
+        const text = await res.text();
+
+        if (!res.ok) {
+          statusEl.textContent = `HTTP ${res.status} ${res.statusText}: ${text.slice(0, 160)}`;
+          return;
+        }
+
+        const data = JSON.parse(text);
+        if (!Array.isArray(data)) {
+          statusEl.textContent = `Unexpected response: ${text.slice(0, 160)}`;
+          return;
+        }
+
+        // 시즌 표시 (데이터 안의 Season 필드에서 가져옴)
+        const any = data[0] || {};
+        const seasonYear = any.Season ?? "-";
+        seasonPill.textContent = `Season: ${seasonYear}`;
+
+        renderOverall(data);
+        renderByDivision(data);
+
+        statusEl.textContent = `Updated (${new Date().toLocaleString()})`;
+      } catch (e) {
+        statusEl.textContent = `Fetch error: ${String(e)}`;
+        console.error(e);
+      } finally {
+        reloadBtn.disabled = false;
+      }
+    }
+
+    reloadBtn.addEventListener("click", load);
+    load();
+  </script>
+</body>
+</html>
