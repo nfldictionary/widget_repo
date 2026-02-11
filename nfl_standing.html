@@ -1,122 +1,55 @@
-<!doctype html>
-<html lang="ko">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>NFL Standings Widget</title>
+<script>
+  const API_KEY = "네키";
+  const SEASON = "2024REG";
 
-  <style>
-    body {
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      background: #0f172a;
-      color: white;
-      margin: 0;
-      padding: 16px;
-    }
+  async function loadStandings() {
+    const statusEl = document.getElementById("status");
+    const tbody = document.querySelector("#table tbody");
 
-    .card {
-      background: #111827;
-      border-radius: 14px;
-      padding: 16px;
-      max-width: 520px;
-      margin: auto;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.4);
-    }
+    statusEl.textContent = "Fetching…";
 
-    h2 {
-      margin: 0 0 12px;
-      font-size: 20px;
-    }
+    try {
+      const url = `https://api.sportsdata.io/v3/nfl/scores/json/Standings/${SEASON}?key=${encodeURIComponent(API_KEY)}`;
+      const res = await fetch(url, { headers: { "Accept": "application/json" } });
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 14px;
-    }
+      // 응답 텍스트 먼저 확보(에러 메시지 확인용)
+      const text = await res.text();
 
-    th, td {
-      padding: 8px 6px;
-      text-align: left;
-    }
-
-    th {
-      color: #9ca3af;
-      font-weight: 500;
-      border-bottom: 1px solid #374151;
-    }
-
-    tr:not(:last-child) td {
-      border-bottom: 1px solid #1f2937;
-    }
-
-    .team {
-      font-weight: 600;
-    }
-
-    .muted {
-      color: #9ca3af;
-      font-size: 12px;
-      margin-top: 8px;
-    }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h2>NFL Standings</h2>
-    <table id="table">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Team</th>
-          <th>W</th>
-          <th>L</th>
-          <th>T</th>
-          <th>Pct</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-    <div class="muted" id="status">Loading…</div>
-  </div>
-
-  <script>
-    const API_KEY = "dd9ab8e54c8f460d8ee479bc577330ee";
-    const SEASON = "2024REG";
-
-    async function loadStandings() {
-      const status = document.getElementById("status");
-      const tbody = document.querySelector("#table tbody");
-
-      try {
-        const url = `https://api.sportsdata.io/v3/nfl/scores/json/Standings/${SEASON}?key=${API_KEY}`;
-        const res = await fetch(url);
-        const data = await res.json();
-
-        // 승률 기준 정렬
-        data.sort((a, b) => b.Percentage - a.Percentage);
-
-        tbody.innerHTML = "";
-        data.forEach((team, index) => {
-          const tr = document.createElement("tr");
-          tr.innerHTML = `
-            <td>${index + 1}</td>
-            <td class="team">${team.City} ${team.Name}</td>
-            <td>${team.Wins}</td>
-            <td>${team.Losses}</td>
-            <td>${team.Ties}</td>
-            <td>${team.Percentage.toFixed(3)}</td>
-          `;
-          tbody.appendChild(tr);
-        });
-
-        status.textContent = "Updated";
-      } catch (e) {
-        status.textContent = "Error loading data";
-        console.error(e);
+      if (!res.ok) {
+        statusEl.textContent = `HTTP ${res.status} ${res.statusText} / ${text.slice(0, 180)}`;
+        return;
       }
-    }
 
-    loadStandings();
-  </script>
-</body>
-</html>
+      const data = JSON.parse(text);
+
+      if (!Array.isArray(data)) {
+        statusEl.textContent = `Unexpected response (not array): ${text.slice(0, 180)}`;
+        return;
+      }
+
+      data.sort((a, b) => (b.Percentage ?? 0) - (a.Percentage ?? 0));
+
+      tbody.innerHTML = "";
+      data.forEach((team, index) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${index + 1}</td>
+          <td class="team">${team.City ?? ""} ${team.Name ?? team.Team ?? ""}</td>
+          <td>${team.Wins ?? "-"}</td>
+          <td>${team.Losses ?? "-"}</td>
+          <td>${team.Ties ?? "-"}</td>
+          <td>${(team.Percentage ?? 0).toFixed ? (team.Percentage).toFixed(3) : "-"}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      statusEl.textContent = "Updated";
+    } catch (e) {
+      // 여기서 "TypeError: Failed to fetch"면 CORS 가능성 큼
+      statusEl.textContent = `Fetch error: ${String(e)}`;
+      console.error(e);
+    }
+  }
+
+  loadStandings();
+</script>
